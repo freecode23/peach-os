@@ -1,4 +1,4 @@
-ORG 0x7c00
+ORG 0x7c00 ;offset , actually should be 0x0
 BITS 16
 
 ; 1. the start function
