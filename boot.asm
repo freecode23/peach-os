@@ -1,9 +1,29 @@
 ; boot loader program final
+; 1. to make into binary: nasm -f bin ./boot.asm -o ./boot.bin
+; 2. to run in qemu: qemu-system-x86_64 -hda ./boot.bin
+; A) set offset and bits
 ORG 0
 BITS 16
 
-; A) the start function
-start: 
+; B) fake BIOS Parameter block
+_start:
+    jmp short start ; jumps to start label
+    nop
+
+times 33 db 0 ; create 33 bytes after, so if BIOS starts overriding values, it will override these 0 values
+
+
+; C) Set code segment to be 0x7c00
+; The boot sector of a floppy disk or hard drive, where this bootloader is intended to reside,
+; is loaded into memory at address 0x7C00 by the BIOS during the boot process.
+; This address is chosen as a standard location that doesn't interfere with the operation of the BIOS or other hardware.
+; Both the code and data segments are located at
+; 0x7C00 because that is where the bootloader's code and data reside in memory.
+start:
+    jmp 0x7c0:step2 ; jumps to step2
+
+; D) the start function
+step2: 
     ; 1. we need to clear interrupts so that no interrupt will happen during bootloading
     ; we will be changing segment registers so we dont want any hardware interreupt now
     cli ; clear interrupts
@@ -28,7 +48,7 @@ start:
     call print
     jmp $
 
-; B) the print function
+; E) the print function
 print: 
     mov bx, 0
 ; keep loading a byte from mem location pointed to by 
@@ -48,17 +68,17 @@ print:
 .done:
     ret
 
-; 3. the print_char function
+; F) the print_char function
 print_char:
     ; set up command
     mov ah, 0eh
     int 0x10
     ret
 
-; 4. variable we want to print
+; G) variable we want to print
 message: db 'Hello', 0
 
-; 5. pad 0 if we dont use all the 510
+; H) pad 0 if we dont use all the 510
 times 510-($-$$) db 0 
 
 dw 0xAA55
