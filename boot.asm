@@ -2,8 +2,12 @@
 ; 1. to make into binary: nasm -f bin ./boot.asm -o ./boot.bin
 ; 2. to run in qemu: qemu-system-x86_64 -hda ./boot.bin
 ; A) set offset and bits
-ORG 0
+ORG 0x7c00
 BITS 16
+
+; to give offset for each descriptor entry
+CODE_SEG equ gdt_code - gdt_start
+DATA_SEG equ gdt_data - gdt_start
 
 ; B) fake BIOS Parameter block
 _start:
@@ -14,13 +18,8 @@ times 33 db 0 ; directives 33 bytes after, so if BIOS starts overriding values, 
 
 
 ; C) Set code segment to be 0x7c00
-; The boot sector of a floppy disk or hard drive, where this bootloader is intended to reside,
-; is loaded into memory at address 0x7C00 by the BIOS during the boot process.
-; This address is chosen as a standard location that doesn't interfere with the operation of the BIOS or other hardware.
-; Both the code and data segments are located at
-; 0x7C00 because that is where the bootloader's code and data reside in memory.
 start:
-    jmp 0x7c0:step2 ; jumps to step2
+    jmp 0:step2 ; jumps to step2
 
 ; D) the start function
 step2: 
@@ -29,95 +28,63 @@ step2:
     cli ; clear interrupts
 
     ; 2. set data segment and extra segment register to 0x7c0
-    mov ax, 0x7c0
+    mov ax, 0x00
     mov ds, ax
     mov es, ax
 
     ; 3.set stack segment to 0x00
-    mov ax, 0x00 
     mov ss, ax
-
     mov sp, 0x7c0 ;stack pointer
     sti ; enable interrupts
 
-    ; AH = 02h
-    ; AL = number of sectors to read (must be nonzero)
-    ; CH = low eight bits of cylinder number
-    ; CL = sector number 1-63 (bits 0-5)
-    ; high two bits of cylinder (bits 6-7, hard disk only)
-    ; DH = head number
-    ; DL = drive number (bit 7 set for hard disk)
-    ; ES:BX -> data buffer
-
-    ; Return:
-    ; CF set on error
-    ; if AH = 11h (corrected ECC error), AL = burst length
-    ; CF clear if successful
-    ; AH = status (see #00234)
-    ; AL = number of sectors transferred (only valid if CF set for some
-    ; BIOSes)
-
-
-    ; 4. Do interrupt 13 to read sectors (message.txt) into memory
-    mov ah, 2 ; read sector command
-    mov al, 1 ; reading 1 sector
-    mov ch, 0 ; cylinder low 8 bits
-    mov cl, 2 ; read sector 2 (the first sector is our code)
-    mov dh, 0 ; head
-    ; load the address of buffer into the bx register. so we can refer to this when we want to print
-    mov bx, buffer; the memory offset from es. where the data will be writted in qemu memory interrupt will read this bx register
-
-    ; 5. 
-    ; dont need to set dl, its already set for it
-    ; we already set es (extra segment to 0x7c0)
-    int 0x13 ;invoke interrupt, move data into the buffer
-    jc error ; jump carry error. if the carry flag is set.it will goto terror
-
-    ; 5. at this point our message.txt has been loaded to the memory pointed by bx
-    ; now point si also to the address of buffer
-    mov si, buffer 
-    call print
+.load_protected:
+    cli
+    lgdt[gdt_descriptor] ; load gdt descriptor table and load the descriptors for code and data we wrote
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax
+    jmp CODE_SEG: load32 ; replace CODE_SEG with offset 0x8, got to load32 and jump infiniete
     
-    jmp $ ;infinit jump
-error:
-    mov si, error_message
-    call print
+
+; E) Create 5 GDT entry ( a descriptor )
+gdt_start:
+
+; E1. null segment
+gdt_null:
+    dd 0x0
+    dd 0x0
+
+; E2. descriptor for code segment (offset 0x8)
+gdt_code: ;cs register should point to this
+    dw 0xffff ; segment limit (first 0-15 bits)
+    dw 0 ; base 0-15 bits
+    db 0 ; base 16-23 bits
+    db 0x9a ;access bytes
+    db 11001111b ; high 4 bit flafgs and low 4 bit flags
+    db 0 ; base 24-31 bits
+
+
+; E3. descriptor for data segment (offset 0x10)
+gdt_data:
+    dw 0xffff ; segment limit (first 0-15 bits)
+    dw 0 ; base 0-15 bits
+    db 0 ; base 16-23 bits
+    db 0x92 ;access bytes
+    db 11001111b ; high 4 bit flafgs and low 4 bit flags
+    db 0 ; base 24-31 bits
+
+; E4. data segment (offset 0x10)
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_start - gdt_end -1 ; size of descriptr
+    dd gdt_start ; offset
+
+[BITS 32] ; from now onwards its 32 bits code
+load32:
     jmp $
 
-; E) the print function
-print: 
-    mov bx, 0
-
-; the loop below keep loading a byte from mem location pointed to by 
-; the si register (starts at 'H') into the al register
-; it will increment the si pointer
-.loop:
-    ; 2.1 load string byte from memory pointed by si to al (load the actual argument argument)
-    lodsb
-
-    ; 2.2 if al is 0, jump to done
-    cmp al, 0
-    je .done
-
-    ; 2.3 else: call the print_char (which just setting up command)
-    call print_char
-    jmp .loop
-.done:
-    ret
-
-; F) the print_char function
-print_char:
-    ; set up command
-    mov ah, 0eh
-    int 0x10
-    ret
-
-; G) 
-error_message: db 'Failed to load sector'
-
-; H) pad 0 if we dont use all the 510
+; I) pad 0 if we dont use all the 510
 times 510-($-$$) db 0 
 
 dw 0xAA55
-
-buffer:
