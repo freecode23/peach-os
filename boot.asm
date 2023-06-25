@@ -34,7 +34,7 @@ step2:
 
     ; 3.set stack segment to 0x00
     mov ss, ax
-    mov sp, 0x7c0 ;stack pointer
+    mov sp, 0x7c00 ;stack pointer
     sti ; enable interrupts
 
 .load_protected:
@@ -46,7 +46,8 @@ step2:
     jmp CODE_SEG: load32 ; replace CODE_SEG with offset 0x8, got to load32 and jump infiniete
     
 
-; E) Create 5 GDT entry ( a descriptor )
+
+; E) Create 5 GDT entry ( a descrip
 gdt_start:
 
 ; E1. null segment
@@ -82,6 +83,14 @@ gdt_descriptor:
 
 [BITS 32] ; from now onwards its 32 bits code
 load32:
+    mov ax, DATA_SEG ;set data registers
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax 
+    mov ss, ax 
+    mov ebp, 0x00200000
+    mov esp, ebp 
     jmp $
 
 ; I) pad 0 if we dont use all the 510
