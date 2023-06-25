@@ -23,3 +23,6 @@ info registers
 ## 4. to kill qemu process after gdb session 
 ps aux | grep qemu
 kill <process number like 168938>
+
+## 5. to clearn the binary files  
+make clean

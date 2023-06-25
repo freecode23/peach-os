@@ -47,7 +47,7 @@ step2:
     
 
 
-; E) Create 5 GDT entry ( a descrip
+; E) Create 5 GDT entry ( a descriptor)
 gdt_start:
 
 ; E1. null segment
@@ -84,8 +84,8 @@ gdt_descriptor:
 [BITS 32] ; from now onwards its 32 bits code
 load32:
     mov ax, DATA_SEG ;set data registers
-    mov ds, ax
-    mov es, ax
+    mov ds, ax ; put 0x10 to ds, es, fs, gs and ss
+    mov es, ax ; so they all point to 0x10 now
     mov fs, ax
     mov gs, ax 
     mov ss, ax 
