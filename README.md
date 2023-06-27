@@ -11,7 +11,7 @@ make
 ## 2. load the bootloader as hard drive to qemu
 qemu-system-x86_64 -hda ./boot.bin  
 
-## 3. to check if we are in protected mode debug remotely using qemu
+## 3. to check if we are in protected mode debug remotely using qemu. inside the bin directory:  
 gdb-multiarch
 target remote | qemu-system-x86_64 -hda ./boot.bin -S -gdb stdio  
 press c to continue  

@@ -3,8 +3,9 @@
 ; 2. to run in qemu: qemu-system-x86_64 -hda ./boot.bin
 ; A) set offset and bits
 ORG 0x7c00
-BITS 16
+BITS 16 ; From here onwards is realmode
 
+; Define code segment and data segment
 ; to give offset for each descriptor entry
 CODE_SEG equ gdt_code - gdt_start
 DATA_SEG equ gdt_data - gdt_start
@@ -14,12 +15,15 @@ _start:
     jmp short start ; jumps to start label
     nop
 
-times 33 db 0 ; directives 33 bytes after, so if BIOS starts overriding values, it will override these 0 values
+; directives 33 bytes after, so if BIOS starts overriding values, it will override these 0 values
+times 33 db 0 
 
 
-; C) Set code segment to be 0x7c00
+; C) 
 start:
-    jmp 0:step2 ; jumps to step2
+    ; jumps to segment 0 then find step2 address
+    ; set cs register from 0x7c00 + step2
+    jmp 0:step2  
 
 ; D) the start function
 step2: 
@@ -39,15 +43,26 @@ step2:
 
 .load_protected:
     cli
-    lgdt[gdt_descriptor] ; load gdt descriptor table and load the descriptors for code and data we wrote
-    mov eax, cr0
-    or eax, 0x1
+    ; 1. lgdt instruction loads the address (and size) of the GDT from memory into the GDTR, so the processor knows where to find the GDT in memory.
+    lgdt[gdt_descriptor]
+
+    ; 2. move value in cr0 to eax so we can modify the cr0 values
+    mov eax, cr0 
+
+    ; 3. This sets the least significant bit of EAX (which now holds the value of CR0) to 1.
+    ;This bit is the Protection Enable (PE) bit. When set to 1, it enables Protected Mode.
+    or eax, 0x1 
+    
+    ; 4. move back value in eax to cr0
+    ; now we are in Protected mode
     mov cr0, eax
-    jmp CODE_SEG: load32 ; replace CODE_SEG with offset 0x8, got to load32 and jump infiniete
+
+    ; 5. jump to load32, which is a part of code segment
+    jmp CODE_SEG: load32 
     
 
 
-; E) Create 5 GDT entry ( a descriptor)
+; E) Init 5 GDT entry (a descriptor)
 gdt_start:
 
 ; E1. null segment
@@ -66,7 +81,7 @@ gdt_code: ;cs register should point to this
 
 
 ; E3. descriptor for data segment (offset 0x10)
-gdt_data:
+gdt_data: ;ds should point to this
     dw 0xffff ; segment limit (first 0-15 bits)
     dw 0 ; base 0-15 bits
     db 0 ; base 16-23 bits
@@ -81,7 +96,8 @@ gdt_descriptor:
     dw gdt_start - gdt_end -1 ; size of descriptr
     dd gdt_start ; offset
 
-[BITS 32] ; from now onwards its 32 bits code
+; F) PROTECTED MODE
+[BITS 32] ; from now onwards its 32 bits code (protected mode)
 load32:
     mov ax, DATA_SEG ;set data registers
     mov ds, ax ; put 0x10 to ds, es, fs, gs and ss
@@ -91,9 +107,14 @@ load32:
     mov ss, ax 
     mov ebp, 0x00200000
     mov esp, ebp 
+
+    ; enable A20 lines 
+    in al, 0x92
+    or al, 2
+    out 0x92, al
     jmp $
 
-; I) pad 0 if we dont use all the 510
+; G) pad 0 if we dont use all the 510
 times 510-($-$$) db 0 
 
 dw 0xAA55
