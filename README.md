@@ -1,4 +1,4 @@
-## PREREQUIISTES:  
+## PREREQUISTES:  
 
 gdb  
 qemu
